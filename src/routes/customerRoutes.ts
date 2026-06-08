@@ -14,21 +14,30 @@ router.post('/customers', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
-// Task 3: Create Aggregation API
+// Task 3: Create Aggregation API (With Pagination)
 router.get('/customer-orders', async (req: Request, res: Response): Promise<void> => {
   try {
+    // 1. Extract query parameters with default values
+    // If the user doesn't provide them, it defaults to page 1, 10 items per page
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    
+    // 2. Calculate how many documents to skip
+    const skipAmount = (page - 1) * limit;
+
+    // 3. Execute the aggregation pipeline
     const data = await Customer.aggregate([
       {
         $lookup: {
-          from: 'orders', // Name of the target collection in MongoDB
+          from: 'orders',
           localField: 'customerId',
           foreignField: 'customerId',
           as: 'orderDetails'
         }
       },
-      { $unwind: '$orderDetails' }, // Deconstructs the array
+      { $unwind: '$orderDetails' },
       {
-        $project: { // Formats the output
+        $project: {
           _id: 0,
           customerId: 1,
           customerName: '$name',
@@ -39,8 +48,12 @@ router.get('/customer-orders', async (req: Request, res: Response): Promise<void
           amount: '$orderDetails.amount',
           orderDate: '$orderDetails.orderDate'
         }
-      }
+      },
+      // 4. Apply pagination operators at the end
+      { $skip: skipAmount },
+      { $limit: limit }
     ]);
+
     res.status(200).json(data);
   } catch (error: any) {
     res.status(500).json({ error: 'Internal Server Error' });
